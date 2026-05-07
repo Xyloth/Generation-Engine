@@ -7,6 +7,47 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Command,
+        [Parameter(Mandatory = $true)]
+        [string]$FailureMessage
+    )
+
+    $previousPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 turns native stderr into ErrorRecords when
+        # ErrorActionPreference is Stop. Git and gh both write harmless status
+        # lines to stderr, so native commands are judged by exit code only.
+        $ErrorActionPreference = "Continue"
+        & $Command
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    if ($exitCode -ne 0) {
+        throw "$FailureMessage (exit code $exitCode)"
+    }
+}
+
+function Test-NativeSuccess {
+    param(
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Command
+    )
+
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $Command
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
 $RootPath = (Resolve-Path $Root).Path
 Set-Location $RootPath
 
@@ -19,19 +60,15 @@ if (-not $Version) {
     throw "VERSION is empty."
 }
 
-& gh --version *> $null
-if ($LASTEXITCODE -ne 0) {
-    throw "GitHub CLI is not installed or is not on PATH."
-}
+Get-Command gh -ErrorAction Stop | Out-Null
+Get-Command git -ErrorAction Stop | Out-Null
 
-& gh auth status *> $null
-if ($LASTEXITCODE -ne 0) {
-    throw "GitHub CLI is not logged in. Run: gh auth login"
-}
+Invoke-Native { gh --version *> $null } "GitHub CLI is not installed or is not on PATH."
+Invoke-Native { gh auth status *> $null } "GitHub CLI is not logged in. Run: gh auth login"
 
-$RemoteUrl = & git remote get-url origin 2>$null
-if ($LASTEXITCODE -ne 0 -or -not $RemoteUrl) {
-    & git remote add origin "https://github.com/$Repo.git"
+$HasOrigin = Test-NativeSuccess { git remote get-url origin *> $null }
+if (-not $HasOrigin) {
+    Invoke-Native { git remote add origin "https://github.com/$Repo.git" } "Failed to add origin remote."
 }
 
 $Dirty = & git status --porcelain
@@ -39,15 +76,9 @@ if ($Dirty) {
     throw "Working tree has uncommitted changes. Commit before publishing a release."
 }
 
-& git push -u origin main
-if ($LASTEXITCODE -ne 0) {
-    throw "git push failed. Make sure https://github.com/$Repo exists and you have push access."
-}
+Invoke-Native { git push -u origin main } "git push failed. Make sure https://github.com/$Repo exists and you have push access."
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "package-release.ps1") -Root $RootPath
-if ($LASTEXITCODE -ne 0) {
-    throw "Release package build failed."
-}
+Invoke-Native { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "package-release.ps1") -Root $RootPath } "Release package build failed."
 
 $ZipPath = Join-Path $RootPath "dist\Generation_Engine-v$Version.zip"
 if (-not (Test-Path $ZipPath)) {
@@ -55,11 +86,10 @@ if (-not (Test-Path $ZipPath)) {
 }
 
 $Tag = "v$Version"
-& gh release view $Tag --repo $Repo *> $null
-$ReleaseExists = $LASTEXITCODE -eq 0
+$ReleaseExists = Test-NativeSuccess { gh release view $Tag --repo $Repo *> $null }
 
 if ($ReleaseExists) {
-    & gh release upload $Tag $ZipPath --repo $Repo --clobber
+    Invoke-Native { gh release upload $Tag $ZipPath --repo $Repo --clobber } "GitHub release asset upload failed."
 } else {
     $Args = @(
         "release",
@@ -76,11 +106,7 @@ if ($ReleaseExists) {
     if ($Draft) {
         $Args += "--draft"
     }
-    & gh @Args
-}
-
-if ($LASTEXITCODE -ne 0) {
-    throw "GitHub release publish failed."
+    Invoke-Native { gh @Args } "GitHub release publish failed."
 }
 
 Write-Host "Published Generation Engine $Tag to https://github.com/$Repo/releases/tag/$Tag"
