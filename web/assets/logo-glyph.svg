@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Generation Engine">
+  <defs>
+    <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f4e3b0"></stop>
+      <stop offset="60%" stop-color="#dcb766"></stop>
+      <stop offset="100%" stop-color="#8a673a"></stop>
+    </linearGradient>
+    <linearGradient id="tile" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.06)"></stop>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.01)"></stop>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#14141a"></rect>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#tile)"></rect>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" fill="none" stroke="rgba(220,183,102,0.28)" stroke-width="1"></rect>
+  <text x="32" y="46" text-anchor="middle" font-family="&#39;Fraunces&#39;,&#39;Iowan Old Style&#39;,&#39;Apple Garamond&#39;,Garamond,serif" font-weight="400" font-size="42" font-style="italic" fill="url(#g)">G</text>
+</svg>

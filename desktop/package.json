@@ -1,0 +1,10 @@
+{
+  "name": "generation-engine-shell",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "description": "Native desktop shell for Generation Engine",
+  "dependencies": {
+    "electron": "42.0.0"
+  }
+}

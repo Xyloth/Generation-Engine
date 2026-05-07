@@ -1,0 +1,24 @@
+{
+  "anthropicApiKey": "sk-ant-your-key-here",
+  "mode": "auto",
+  "booksDir": "books",
+  "port": 8765,
+  "draftModel": "claude-opus-4-7",
+  "utilityModel": "claude-sonnet-4-6",
+  "claudeCodeModel": "claude-sonnet-4-6",
+  "claudePath": "claude",
+  "update": {
+    "repo": "Xyloth/Generation-Engine"
+  },
+  "bugReport": {
+    "recipient": "founder@xyflowinnovations.com",
+    "smtp": {
+      "host": "smtp.example.com",
+      "port": 587,
+      "starttls": true,
+      "username": "bug-reports@example.com",
+      "password": "app-password-or-smtp-token",
+      "from": "bug-reports@example.com"
+    }
+  }
+}
