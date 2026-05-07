@@ -105,6 +105,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package-release.ps1 
 
 Upload `dist/Generation_Engine-v<version>.zip` to a GitHub Release whose tag is `v<version>`.
 
+If the GitHub repo already exists and `gh auth login` has been completed, publish the current committed version with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish-release.ps1 -Repo Xyloth/Generation-Engine
+```
+
 The in-app **Check for update** button reads the latest GitHub Release, downloads the zip, preserves `books/` and `config.local.json`, replaces app files, refreshes the desktop shortcut, and restarts.
 
 ## Repository Safety
