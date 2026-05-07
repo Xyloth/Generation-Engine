@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$Root = "",
     [string]$Repo = "Xyloth/Generation-Engine",
     [switch]$Draft
 )
@@ -46,6 +46,10 @@ function Test-NativeSuccess {
     } finally {
         $ErrorActionPreference = $previousPreference
     }
+}
+
+if (-not $Root) {
+    $Root = Join-Path $PSScriptRoot ".."
 }
 
 $RootPath = (Resolve-Path $Root).Path
