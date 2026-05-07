@@ -1179,6 +1179,8 @@ function renderImportModal() {
 
 function renderImportProposalModal() {
   const proposal = state.modal.proposal;
+  const diagnostics = proposal.importDiagnostics || {};
+  const warnings = diagnostics.warnings || [];
   return `
     <div class="modal-backdrop">
       <section class="modal wide">
@@ -1187,6 +1189,11 @@ function renderImportProposalModal() {
           <span class="ge-pill">${(proposal.chapters || []).length} chapters</span>
         </header>
         <div class="modal-body">
+          <div class="ge-import-diagnostics">
+            <strong>${escapeHtml(proposal.mode === "staged-claude-import" ? "Staged Claude import" : "Local import fallback")}</strong>
+            <span>${escapeHtml(String(diagnostics.chapterCount || (proposal.chapters || []).length))} chapters analyzed${diagnostics.batchCount ? ` in ${escapeHtml(String(diagnostics.batchCount))} batches` : ""}.</span>
+            ${warnings.length ? `<span class="ge-status-warning">${escapeHtml(warnings.slice(0, 3).join(" "))}${warnings.length > 3 ? " More warnings are embedded in the proposal data." : ""}</span>` : ""}
+          </div>
           <label>Book title
             <input id="proposalTitle" value="${escapeHtml(proposal.title || "")}" />
           </label>

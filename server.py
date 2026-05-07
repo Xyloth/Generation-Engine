@@ -88,6 +88,19 @@ Drafting rules:
 - Avoid these AI tells: "the air was thick with tension", "she felt a sense of", "a reminder that", "in that moment", "could not help but", closing paragraphs that summarize the meaning of the scene, and tidy emotional thesis statements.
 """
 
+IMPORT_SYSTEM = """You are Generation Engine's import analyst.
+
+You are not drafting prose. You are reading already-written chapters and extracting usable canon for a long-running writing project.
+
+Rules:
+- Infer only from supplied text.
+- Preserve uncertainty as "possible", "implied", or "unclear"; do not invent.
+- Prefer concrete details over labels.
+- Character entries must contain useful notes: role, voice/speech, goals, fears, relationships, and current state when the text supports them.
+- Timeline must cover every imported chapter, not just the opening chapters.
+- Return valid JSON only. No markdown fences, no commentary.
+"""
+
 
 BASE_RESEARCH_SYSTEM = """You are a careful research assistant working with one human author on a long-form nonfiction project.
 
@@ -1974,7 +1987,7 @@ def claude_code_message(
 
 
 def claude_code_message_for_import(prompt: str) -> str:
-    command, stdin_prefix = claude_code_command(CONFIG.claude_code_model, BASE_NOVELIST_SYSTEM, stream=False)
+    command, stdin_prefix = claude_code_command(CONFIG.claude_code_model, IMPORT_SYSTEM, stream=False)
     completed = subprocess.run(
         command,
         input=stdin_prefix + prompt,
@@ -2153,6 +2166,338 @@ def mock_import(raw: str, title: str) -> dict[str, Any]:
             "voice_profile": DEFAULT_CANON["voice_profile"],
         },
         "mode": "local-fallback",
+    }
+
+
+def listify(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if item not in (None, "")]
+    if isinstance(value, tuple):
+        return [item for item in value if item not in (None, "")]
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def short_note(value: Any, limit: int = 340) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    return text[:limit].rstrip()
+
+
+def unique_notes(notes: Iterable[Any], limit: int = 20) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for note in notes:
+        text = short_note(note)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def bullet_lines(notes: Iterable[Any], fallback: str = "Not yet clear from the imported chapters.") -> str:
+    items = unique_notes(notes)
+    if not items:
+        return f"- {fallback}"
+    return "\n".join(f"- {item}" for item in items)
+
+
+def import_batches(chapters: list[dict[str, str]], max_chars: int = 65000, max_chapters: int = 4) -> list[list[dict[str, str]]]:
+    batches: list[list[dict[str, str]]] = []
+    current: list[dict[str, str]] = []
+    current_chars = 0
+    for index, chapter in enumerate(chapters, start=1):
+        prepared = {
+            "id": pad_id(index),
+            "title": chapter.get("title") or f"Chapter {index}",
+            "content": chapter.get("content") or "",
+        }
+        size = len(prepared["content"])
+        if current and (current_chars + size > max_chars or len(current) >= max_chapters):
+            batches.append(current)
+            current = []
+            current_chars = 0
+        current.append(prepared)
+        current_chars += size
+    if current:
+        batches.append(current)
+    return batches
+
+
+def build_import_batch_prompt(title: str, batch: list[dict[str, str]]) -> str:
+    chapters = []
+    for chapter in batch:
+        chapters.append(
+            f"## IMPORTED CHAPTER {chapter['id']}: {chapter['title']}\n\n{chapter['content'][:85000]}"
+        )
+    return (
+        "Analyze this batch of imported chapters for a novel project. Return one strict JSON object with this shape:\n"
+        "{\n"
+        '  "chapters": [\n'
+        "    {\n"
+        '      "id": "01",\n'
+        '      "title": "Chapter title",\n'
+        '      "summary": "6-10 concrete sentences covering what changes in the chapter, including the ending state.",\n'
+        '      "characters": [\n'
+        '        {"name":"", "role":"", "voice":"", "goals":"", "fears":"", "relationships":[""], "current_state":"", "evidence":["short concrete support from this chapter"]}\n'
+        "      ],\n"
+        '      "world": ["setting, rules, institutions, objects, history, magic/tech/social details"],\n'
+        '      "events": [{"when":"", "where":"", "what":"", "characters":[""]}],\n'
+        '      "arcs_opened": [""],\n'
+        '      "arcs_advanced": [""],\n'
+        '      "arcs_closed": [""],\n'
+        '      "voice_notes": ["sentence rhythm, POV handling, dialogue habits, descriptive density"]\n'
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Requirements:\n"
+        "- Include every chapter in the batch.\n"
+        "- Do not leave character fields blank when the chapter gives evidence. If a field is unclear, write 'unclear from this chapter'.\n"
+        "- Keep summaries specific. No generic 'tension rises' language.\n"
+        "- Character evidence should be concrete but short.\n"
+        "- JSON only.\n\n"
+        f"Book title: {title}\n\n"
+        + "\n\n---\n\n".join(chapters)
+    )
+
+
+def local_chapter_analysis(chapter: dict[str, str]) -> dict[str, Any]:
+    content = chapter.get("content", "")
+    names = extract_names(content, 12)
+    return {
+        "id": chapter["id"],
+        "title": chapter.get("title") or f"Chapter {int(chapter['id'])}",
+        "summary": first_sentences(content, 5) or "Summary needs review.",
+        "characters": [
+            {
+                "name": name,
+                "role": f"Referenced in Chapter {int(chapter['id'])}.",
+                "voice": "unclear from this chapter",
+                "goals": "unclear from this chapter",
+                "fears": "unclear from this chapter",
+                "relationships": [],
+                "current_state": "unclear from this chapter",
+                "evidence": [f"Name appears in Chapter {int(chapter['id'])}."],
+            }
+            for name in names
+        ],
+        "world": [],
+        "events": [{"when": f"Chapter {int(chapter['id'])}", "where": "", "what": first_sentences(content, 2), "characters": names[:6]}],
+        "arcs_opened": [],
+        "arcs_advanced": [],
+        "arcs_closed": [],
+        "voice_notes": [],
+    }
+
+
+def normalize_import_chapter(raw: dict[str, Any], fallback: dict[str, str]) -> dict[str, Any]:
+    item = dict(raw or {})
+    item["id"] = pad_id(item.get("id") or fallback["id"])
+    item["title"] = str(item.get("title") or fallback.get("title") or f"Chapter {int(item['id'])}")
+    item["summary"] = short_note(item.get("summary"), 1200) or first_sentences(fallback.get("content", ""), 5) or "Summary needs review."
+    normalized_characters = []
+    for character in listify(item.get("characters")):
+        if not isinstance(character, dict):
+            continue
+        name = short_note(character.get("name"), 90)
+        if not name:
+            continue
+        normalized_characters.append(
+            {
+                "name": name,
+                "role": short_note(character.get("role")) or "unclear from imported chapters",
+                "voice": short_note(character.get("voice")) or "unclear from imported chapters",
+                "goals": short_note(character.get("goals")) or "unclear from imported chapters",
+                "fears": short_note(character.get("fears")) or "unclear from imported chapters",
+                "relationships": unique_notes(character.get("relationships") or []),
+                "current_state": short_note(character.get("current_state")) or "unclear from imported chapters",
+                "evidence": unique_notes(character.get("evidence") or []),
+            }
+        )
+    if not normalized_characters:
+        normalized_characters = local_chapter_analysis(fallback)["characters"]
+    item["characters"] = normalized_characters
+    item["world"] = unique_notes(item.get("world") or [], 30)
+    item["events"] = [event for event in listify(item.get("events")) if isinstance(event, dict)]
+    if not item["events"]:
+        item["events"] = local_chapter_analysis(fallback)["events"]
+    item["arcs_opened"] = unique_notes(item.get("arcs_opened") or [], 20)
+    item["arcs_advanced"] = unique_notes(item.get("arcs_advanced") or [], 20)
+    item["arcs_closed"] = unique_notes(item.get("arcs_closed") or [], 20)
+    item["voice_notes"] = unique_notes(item.get("voice_notes") or [], 20)
+    return item
+
+
+def analyze_import_batch(title: str, batch: list[dict[str, str]]) -> tuple[list[dict[str, Any]], list[str]]:
+    prompt = build_import_batch_prompt(title, batch)
+    warnings: list[str] = []
+    try:
+        response = import_message(prompt)
+        parsed = json.loads(extract_json(response))
+        raw_chapters = parsed.get("chapters") if isinstance(parsed, dict) else None
+        if not isinstance(raw_chapters, list):
+            raise ValueError("Import analysis did not return a chapters array.")
+    except Exception as exc:
+        warnings.append(f"Claude import analysis failed for chapters {batch[0]['id']}-{batch[-1]['id']}: {exc}")
+        return [local_chapter_analysis(chapter) for chapter in batch], warnings
+
+    by_id = {pad_id(chapter.get("id") or ""): chapter for chapter in raw_chapters if isinstance(chapter, dict)}
+    normalized: list[dict[str, Any]] = []
+    for fallback in batch:
+        raw = by_id.get(fallback["id"])
+        if raw is None:
+            warnings.append(f"Claude import analysis omitted Chapter {fallback['id']}; local fallback filled it.")
+            normalized.append(local_chapter_analysis(fallback))
+        else:
+            normalized.append(normalize_import_chapter(raw, fallback))
+    return normalized, warnings
+
+
+def build_import_canon_from_analyses(title: str, chapters: list[dict[str, str]], analyses: list[dict[str, Any]]) -> dict[str, str]:
+    characters: dict[str, dict[str, list[str]]] = {}
+    chapter_titles = {pad_id(index): chapter.get("title") or f"Chapter {index}" for index, chapter in enumerate(chapters, start=1)}
+    for analysis in analyses:
+        cid = pad_id(analysis.get("id") or "")
+        for character in analysis.get("characters") or []:
+            name = short_note(character.get("name"), 90)
+            if not name:
+                continue
+            entry = characters.setdefault(
+                name,
+                {"role": [], "voice": [], "goals": [], "fears": [], "relationships": [], "current_state": [], "evidence": [], "chapters": []},
+            )
+            entry["chapters"].append(str(int(cid)) if cid.isdigit() else cid)
+            for field in ("role", "voice", "goals", "fears", "current_state"):
+                value = short_note(character.get(field))
+                if value and "unclear from this chapter" not in value.lower():
+                    entry[field].append(f"Ch {int(cid) if cid.isdigit() else cid}: {value}")
+            for rel in unique_notes(character.get("relationships") or []):
+                entry["relationships"].append(f"Ch {int(cid) if cid.isdigit() else cid}: {rel}")
+            for evidence in unique_notes(character.get("evidence") or []):
+                entry["evidence"].append(f"Ch {int(cid) if cid.isdigit() else cid}: {evidence}")
+
+    character_md = ["# Characters\n"]
+    for name in sorted(characters):
+        entry = characters[name]
+        seen_chapters = ", ".join(unique_notes(entry["chapters"], 30))
+        character_md.append(
+            f"## {name}\n"
+            f"- Appears in: {seen_chapters or 'Imported chapters'}\n"
+            f"- Role:\n{bullet_lines(entry['role'])}\n"
+            f"- Voice:\n{bullet_lines(entry['voice'])}\n"
+            f"- Goals:\n{bullet_lines(entry['goals'])}\n"
+            f"- Fears:\n{bullet_lines(entry['fears'])}\n"
+            f"- Relationships:\n{bullet_lines(entry['relationships'])}\n"
+            f"- Current state:\n{bullet_lines(entry['current_state'])}\n"
+            f"- Evidence:\n{bullet_lines(entry['evidence'])}\n"
+        )
+
+    if len(character_md) == 1:
+        character_md.append(DEFAULT_CANON["characters"].replace("# Characters\n\n", ""))
+
+    world_notes: list[str] = []
+    voice_notes: list[str] = []
+    opened: list[str] = []
+    advanced: list[str] = []
+    closed: list[str] = []
+    timeline = ["# Timeline\n"]
+    for analysis in analyses:
+        cid = pad_id(analysis.get("id") or "")
+        title_text = analysis.get("title") or chapter_titles.get(cid) or f"Chapter {int(cid)}"
+        timeline.append(f"## Chapter {int(cid) if cid.isdigit() else cid}: {title_text}\n\n{analysis.get('summary') or 'Summary needs review.'}\n")
+        events = analysis.get("events") or []
+        if events:
+            timeline.append("### Events\n")
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                when = short_note(event.get("when"), 90) or f"Chapter {int(cid) if cid.isdigit() else cid}"
+                where = short_note(event.get("where"), 120)
+                what = short_note(event.get("what"), 360)
+                people = ", ".join(unique_notes(event.get("characters") or [], 10))
+                detail = what or analysis.get("summary") or "Event needs review."
+                suffix = []
+                if where:
+                    suffix.append(f"where: {where}")
+                if people:
+                    suffix.append(f"people: {people}")
+                timeline.append(f"- {when}: {detail}{' (' + '; '.join(suffix) + ')' if suffix else ''}\n")
+        for note in analysis.get("world") or []:
+            world_notes.append(f"Ch {int(cid) if cid.isdigit() else cid}: {note}")
+        for note in analysis.get("voice_notes") or []:
+            voice_notes.append(f"Ch {int(cid) if cid.isdigit() else cid}: {note}")
+        opened.extend(f"Ch {int(cid) if cid.isdigit() else cid}: {note}" for note in analysis.get("arcs_opened") or [])
+        advanced.extend(f"Ch {int(cid) if cid.isdigit() else cid}: {note}" for note in analysis.get("arcs_advanced") or [])
+        closed.extend(f"Ch {int(cid) if cid.isdigit() else cid}: {note}" for note in analysis.get("arcs_closed") or [])
+
+    world = (
+        "# World\n\n"
+        "## Setting / Continuity Details\n"
+        f"{bullet_lines(world_notes)}\n\n"
+        "## Rules\n- Review imported details above and promote any hard rules here.\n\n"
+        "## Factions\n- Review imported details above and promote any factions/institutions here.\n\n"
+        "## History\n- Review imported details above and promote any backstory/history here.\n"
+    )
+    arcs = (
+        "# Arcs / Threads\n\n"
+        "## Open\n"
+        f"{bullet_lines(opened, 'Review imported chapters and list open promises here.')}\n\n"
+        "## Advanced\n"
+        f"{bullet_lines(advanced, 'No advanced threads were clearly extracted.')}\n\n"
+        "## Closed\n"
+        f"{bullet_lines(closed, 'No closed threads were clearly extracted.')}\n"
+    )
+    voice_profile = (
+        "# Voice Profile\n\n"
+        "Imported voice observations. Edit this into the target style before drafting new chapters.\n\n"
+        f"{bullet_lines(voice_notes, 'Voice still needs a user-authored descriptor. Use the voice generator or edit this paragraph.')}\n"
+    )
+    return {
+        "world": world,
+        "characters": "\n".join(character_md),
+        "timeline": "\n".join(timeline),
+        "arcs": arcs,
+        "voice_profile": voice_profile,
+    }
+
+
+def staged_import(raw: str, title: str) -> dict[str, Any]:
+    chapters = split_markdown_chapters(raw)
+    if not chapters:
+        chapters = [{"title": "Chapter 1", "content": raw}]
+    prepared_chapters = [
+        {"id": pad_id(index), "title": chapter.get("title") or f"Chapter {index}", "content": chapter.get("content", "")}
+        for index, chapter in enumerate(chapters, start=1)
+    ]
+    analyses: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for batch in import_batches(prepared_chapters):
+        batch_analysis, batch_warnings = analyze_import_batch(title, batch)
+        analyses.extend(batch_analysis)
+        warnings.extend(batch_warnings)
+    analyses_by_id = {pad_id(item.get("id") or ""): item for item in analyses}
+    ordered_analyses = [analyses_by_id.get(chapter["id"]) or local_chapter_analysis(chapter) for chapter in prepared_chapters]
+    canon = build_import_canon_from_analyses(title, prepared_chapters, ordered_analyses)
+    return {
+        "title": title or "Imported Book",
+        "chapters": [
+            {"id": chapter["id"], "title": chapter["title"], "content": chapter["content"]}
+            for chapter in prepared_chapters
+        ],
+        "canon": canon,
+        "mode": "staged-claude-import" if real_backend_active() else "local-fallback",
+        "importDiagnostics": {
+            "chapterCount": len(prepared_chapters),
+            "batchCount": len(import_batches(prepared_chapters)),
+            "warnings": warnings,
+        },
     }
 
 
@@ -3186,15 +3531,15 @@ class GenerationHandler(SimpleHTTPRequestHandler):
             raw = str(body.get("raw", ""))
             title = str(body.get("title") or "Imported Book")
             if real_backend_active():
-                prompt = build_prompt("import", {"raw": raw, "title": title}, "__no_book__")
-                # Import is allowed to use the lightweight local splitter first; Claude can improve canon later.
-                proposed = mock_import(raw, title)
                 try:
-                    ai_raw = import_message(prompt)
-                    proposed = json.loads(extract_json(ai_raw))
+                    proposed = staged_import(raw, title)
                 except Exception:
                     if active_mode() == "api":
                         raise
+                    proposed = mock_import(raw, title)
+                    proposed.setdefault("importDiagnostics", {}).setdefault("warnings", []).append(
+                        "Staged Claude import failed; local fallback was used."
+                    )
             else:
                 proposed = mock_import(raw, title)
             self.send_json(proposed)
@@ -3568,7 +3913,7 @@ def anthropic_message_for_import(prompt: str) -> str:
     body = {
         "model": CONFIG.utility_model,
         "max_tokens": 10000,
-        "system": [{"type": "text", "text": BASE_NOVELIST_SYSTEM}],
+        "system": [{"type": "text", "text": IMPORT_SYSTEM}],
         "messages": [{"role": "user", "content": prompt}],
     }
     req = urllib.request.Request(
