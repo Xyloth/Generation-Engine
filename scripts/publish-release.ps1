@@ -95,7 +95,7 @@ $ReleaseExists = Test-NativeSuccess { gh release view $Tag --repo $Repo *> $null
 if ($ReleaseExists) {
     Invoke-Native { gh release upload $Tag $ZipPath --repo $Repo --clobber } "GitHub release asset upload failed."
 } else {
-    $Args = @(
+    $GhArgs = @(
         "release",
         "create",
         $Tag,
@@ -108,9 +108,9 @@ if ($ReleaseExists) {
         "Beta release for Generation Engine. The in-app updater downloads this zip and preserves local books and configuration."
     )
     if ($Draft) {
-        $Args += "--draft"
+        $GhArgs += "--draft"
     }
-    Invoke-Native { gh @Args } "GitHub release publish failed."
+    Invoke-Native { gh @GhArgs } "GitHub release publish failed."
 }
 
 Write-Host "Published Generation Engine $Tag to https://github.com/$Repo/releases/tag/$Tag"
