@@ -433,6 +433,7 @@ function renderEmpty() {
           <button class="ge-btn ge-btn--accent" data-action="create-book" data-project-type="research" ${state.creatingProject ? "disabled" : ""}>${icon("Plus")}Create research project</button>
           <button class="ge-btn ge-btn--accent" data-action="open-import">${icon("Book")}Import chapters</button>
           <button class="ge-btn ge-btn--ghost" data-action="open-bug-report">${icon("Bug")}Report bug</button>
+          ${renderUpdateActionButton()}
         </div>
         <div class="ge-import-inline">
           <label>Book title
@@ -449,6 +450,14 @@ function renderEmpty() {
       </section>
     </main>
   `;
+}
+
+function renderUpdateActionButton(small = false) {
+  const sizeClass = small ? " ge-btn--small" : "";
+  if (state.updateInfo?.updateAvailable) {
+    return `<button class="ge-btn ge-btn--primary${sizeClass}" data-action="install-update" ${state.installingUpdate ? "disabled" : ""}>${icon("External")}${state.installingUpdate ? "Installing..." : "Download Update"}</button>`;
+  }
+  return `<button class="ge-btn ge-btn--ghost${sizeClass}" data-action="check-update" ${state.checkingUpdate ? "disabled" : ""}>${icon("Rotate")}${state.checkingUpdate ? "Checking..." : "Check Updates"}</button>`;
 }
 
 function renderProjectGrid() {
@@ -518,6 +527,7 @@ function renderHeader() {
         <button class="ge-btn ge-btn--ghost ge-btn--small" data-action="open-import">${icon("Book")}Import</button>
         <button class="ge-btn ge-btn--ghost ge-btn--small ${state.storyboardOpen ? "is-active" : ""}" data-action="toggle-storyboard" aria-label="${isResearch() ? "Research board" : "Storyboard"}" title="${isResearch() ? "Research board" : "Storyboard"}">${icon("Layers")}${isResearch() ? "Research Board" : "Storyboard"}</button>
         <button class="ge-btn ge-btn--ghost ge-btn--small" data-action="open-bug-report" title="Report a bug">${icon("Bug")}Report Bug</button>
+        ${renderUpdateActionButton(true)}
         <button class="ge-pill ${state.settingsOpen ? "is-active" : ""}" data-action="toggle-settings" title="${escapeHtml(state.status?.statusMessage || "")}">
           <span class="dot"></span>${escapeHtml(modeLabel(state.status?.mode))}
         </button>
@@ -552,7 +562,7 @@ function renderSettingsPopover() {
           <span>Latest: ${escapeHtml(state.updateInfo.latestVersion || "none")}</span>
         </div>
       ` : ""}
-      <button class="ge-btn ge-btn--ghost ge-btn--small" data-action="check-update" ${state.checkingUpdate ? "disabled" : ""}>${icon("Recap")}${state.checkingUpdate ? "Checking..." : "Check for update"}</button>
+      <button class="ge-btn ge-btn--ghost ge-btn--small" data-action="check-update" ${state.checkingUpdate ? "disabled" : ""}>${icon("Rotate")}${state.checkingUpdate ? "Checking..." : "Check for update"}</button>
       <button class="ge-btn ge-btn--primary ge-btn--small" data-action="install-update" ${state.updateInfo?.updateAvailable && !state.installingUpdate ? "" : "disabled"}>${icon("External")}${state.installingUpdate ? "Installing..." : "Download update"}</button>
       <button class="ge-btn ge-btn--ghost ge-btn--small" data-action="clear-conversation">${icon("Trash")}New conversation</button>
       <button class="ge-btn ge-btn--ghost ge-btn--small" data-action="open-bug-report">${icon("Bug")}Report bug</button>
