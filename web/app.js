@@ -1542,11 +1542,12 @@ async function handleAction(action, button) {
   if (action === "delete-project-prompt") return openDeleteProject(button.dataset.slug);
   if (action === "confirm-delete-project") return deleteProject(button.dataset.slug);
   if (action === "open-bug-report") {
-    try {
-      state.status = await getJson("/api/status");
-    } catch (_error) {
-      // The draft endpoint will surface any backend problem.
-    }
+    openBugReportWindow();
+    state.settingsOpen = false;
+    render();
+    return;
+  }
+  if (action === "open-bug-report-modal") {
     state.modal = { type: "bug-report", description: "", draft: null, generating: false };
     state.settingsOpen = false;
     render();
@@ -1754,6 +1755,19 @@ async function deleteProject(slug) {
   await refreshBooks();
   render();
   showToast("Project deleted");
+}
+
+function openBugReportWindow() {
+  const params = new URLSearchParams();
+  if (state.book?.slug) params.set("slug", state.book.slug);
+  if (state.book?.title) params.set("project", state.book.title);
+  params.set("from", state.book ? "workspace" : "projects");
+  const url = `/bug-report.html?${params.toString()}`;
+  const popup = window.open(url, "generation-engine-bug-report", "width=880,height=920");
+  if (!popup) {
+    state.modal = { type: "bug-report", description: "", draft: null, generating: false };
+    requestAnimationFrame(() => $("#bugReportDescription")?.focus());
+  }
 }
 
 function bugDiagnostics() {
