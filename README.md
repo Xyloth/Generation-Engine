@@ -133,6 +133,13 @@ Release zips contain the portable runtime and all dependencies. Source control d
 
 Pre-1.0 beta. Currently used privately by the author's family. Expect breakage as features land. Bug reports surface inside the app and open a pre-filled Gmail draft addressed to the maintainer.
 
+## License
+
+Source code and project documentation are released under the MIT License. User
+content, local configuration, release archives, private working material, design
+assets, and portable runtime bundles are excluded from this repository and are
+not covered by the source license.
+
 ## About
 
 Built and maintained by [@Xyloth](https://github.com/Xyloth). Designed end-to-end — product model, architecture, system prompts, and the decision to scrap the prior autopilot iteration in favor of the current chat-first, file-led, human-in-the-loop direction. AI-assisted implementation; solo-directed engineering. Contact via the in-app bug-report flow or GitHub.
